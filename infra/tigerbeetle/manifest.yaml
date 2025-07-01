@@ -1,0 +1,57 @@
+---
+# Headless service for stable network identity
+apiVersion: v1
+kind: Service
+metadata:
+  name: tigerbeetle
+  labels:
+    app: tigerbeetle
+spec:
+  ports:
+  - port: 3001
+    name: tb-port
+  clusterIP: None
+  selector:
+    app: tigerbeetle
+---
+# StatefulSet to manage the TigerBeetle pod
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tigerbeetle
+spec:
+  serviceName: "tigerbeetle"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tigerbeetle
+  template:
+    metadata:
+      labels:
+        app: tigerbeetle
+    spec:
+      initContainers:
+      - name: format-datafile
+        image: ghcr.io/tigerbeetle/tigerbeetle:0.14.0
+        command: ["/tigerbeetle", "format", "--cluster=1", "--replica=0", "--replica-count=1", "/data/0_0.tigerbeetle"]
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      containers:
+      - name: tigerbeetle
+        image: ghcr.io/tigerbeetle/tigerbeetle:0.14.0
+        command: ["/tigerbeetle", "start", "--addresses=0.0.0.0:3001", "/data/0_0.tigerbeetle"]
+        ports:
+        - containerPort: 3001
+          name: tb-port
+        volumeMounts:
+        - name: data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
